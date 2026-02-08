@@ -79,22 +79,31 @@ async function executeTool(toolName, args, chatConfig, state, chatId, client, dm
       console.log(`[Bot] Starting preference collection for ${chatConfig.name}`);
       const agents = {};
 
-      for (const member of chatConfig.members) {
-        // Create a fresh DM thread for this person
-        const threadId = await createDMThread(client, dmAssistantId);
+      // Create all DM threads in parallel
+      const threadResults = await Promise.all(
+        chatConfig.members.map(member => createDMThread(client, dmAssistantId).then(threadId => ({ member, threadId })))
+      );
+
+      for (const { member, threadId } of threadResults) {
         agents[member.contact] = {
           name: member.name,
           threadId,
           status: 'chatting',
           preferences: null,
+          dmSentAt: Date.now(),
+          callState: null,
         };
-
-        // Send initial prompt to DM Agent — it will generate and send the first DM
-        const initMessage = `[SYSTEM] You are DMing ${member.name} about a hangout for the "${chatConfig.name}" group chat. Send them your first message now by calling the send_reply tool. Introduce yourself and ask about their availability and what they want to do.`;
-        const response = await sendToDMAgent(client, threadId, initMessage);
-        console.log(`[Bot] DM Agent init for ${member.name} — status: ${response.status}, toolCalls: ${response.toolCalls?.length || 0}, content: ${response.content ? response.content.substring(0, 100) : '(none)'}`);
-        await processDMToolCalls(client, threadId, response, member.contact, state, chatId, chatConfig, dmAssistantId);
       }
+
+      // Send initial DM agent prompts in parallel
+      await Promise.all(
+        threadResults.map(async ({ member, threadId }) => {
+          const initMessage = `[SYSTEM] You are DMing ${member.name} about a hangout for the "${chatConfig.name}" group chat. Send them your first message now by calling the send_reply tool. Introduce yourself and ask about their availability and what they want to do.`;
+          const response = await sendToDMAgent(client, threadId, initMessage);
+          console.log(`[Bot] DM Agent init for ${member.name} — status: ${response.status}, toolCalls: ${response.toolCalls?.length || 0}, content: ${response.content ? response.content.substring(0, 100) : '(none)'}`);
+          await processDMToolCalls(client, threadId, response, member.contact, state, chatId, chatConfig, dmAssistantId);
+        })
+      );
 
       state.chats[chatId].event = { type: 'collecting', agents };
       saveState(state);
@@ -164,20 +173,33 @@ async function executeTool(toolName, args, chatConfig, state, chatId, client, dm
       console.log(`[Bot] Schedule conflict detected: ${args.conflict_summary}`);
       const agents = {};
 
-      for (const member of chatConfig.members) {
-        const prevPrefs = state.chats[chatId]?.event?.agents?.[member.contact]?.preferences;
-        const threadId = await createDMThread(client, dmAssistantId);
+      // Create all DM threads in parallel
+      const threadResults = await Promise.all(
+        chatConfig.members.map(member => {
+          const prevPrefs = state.chats[chatId]?.event?.agents?.[member.contact]?.preferences;
+          return createDMThread(client, dmAssistantId).then(threadId => ({ member, threadId, prevPrefs }));
+        })
+      );
+
+      for (const { member, threadId } of threadResults) {
         agents[member.contact] = {
           name: member.name,
           threadId,
           status: 'chatting',
           preferences: null,
+          dmSentAt: Date.now(),
+          callState: null,
         };
-
-        const initMessage = `[SYSTEM] RESCHEDULE for "${chatConfig.name}". You are DMing ${member.name}. Conflict: ${args.conflict_summary}. Their previous activity: "${prevPrefs?.activity || 'unknown'}". Send ONE message asking what other dates/times work. Then STOP and wait for their reply. Do NOT call submit_preferences or send "locked in" yet.`;
-        const response = await sendToDMAgent(client, threadId, initMessage);
-        await processDMToolCalls(client, threadId, response, member.contact, state, chatId, chatConfig, dmAssistantId);
       }
+
+      // Send reschedule DM agent prompts in parallel
+      await Promise.all(
+        threadResults.map(async ({ member, threadId, prevPrefs }) => {
+          const initMessage = `[SYSTEM] RESCHEDULE for "${chatConfig.name}". You are DMing ${member.name}. Conflict: ${args.conflict_summary}. Their previous activity: "${prevPrefs?.activity || 'unknown'}". Send ONE message asking what other dates/times work. Then STOP and wait for their reply. Do NOT call submit_preferences or send "locked in" yet.`;
+          const response = await sendToDMAgent(client, threadId, initMessage);
+          await processDMToolCalls(client, threadId, response, member.contact, state, chatId, chatConfig, dmAssistantId);
+        })
+      );
 
       state.chats[chatId].event = { type: 'collecting', agents };
       saveState(state);
