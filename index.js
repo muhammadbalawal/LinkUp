@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { setupAssistant, getOrCreateThread } from './src/assistant.js';
+import { setupAssistant, setupDMAgent, getOrCreateThread } from './src/assistant.js';
 import { startPolling } from './src/bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,10 @@ async function main() {
   // Initialize Backboard
   console.log('[Init] Connecting to Backboard...');
   const { client, assistantId } = await setupAssistant(config.backboard_api_key);
-  console.log(`[Init] Assistant ID: ${assistantId}\n`);
+  console.log(`[Init] Group Agent ID: ${assistantId}`);
+
+  const { dmAssistantId } = await setupDMAgent(client);
+  console.log(`[Init] DM Agent ID: ${dmAssistantId}\n`);
 
   // Set up threads for each group chat
   for (const gc of config.group_chats) {
@@ -44,7 +47,7 @@ async function main() {
   console.log('');
 
   // Start the polling loop
-  await startPolling(client, config.group_chats);
+  await startPolling(client, config.group_chats, dmAssistantId);
 }
 
 main().catch(err => {

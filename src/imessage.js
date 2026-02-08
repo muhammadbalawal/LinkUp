@@ -31,6 +31,7 @@ export function getRecentMessages(chatId, sinceRowId = 0) {
         AND m.ROWID > ?
         AND m.text IS NOT NULL
         AND m.text != ''
+      GROUP BY m.ROWID
       ORDER BY m.ROWID ASC
     `).all(chatId, sinceRowId);
   } finally {
@@ -174,6 +175,7 @@ export function getDMReplies(contact, sinceRowId = 0) {
         AND m.is_from_me = 0
         AND m.text IS NOT NULL
         AND m.text != ''
+      GROUP BY m.ROWID
       ORDER BY m.ROWID ASC
     `).all(contact, sinceRowId);
   } finally {
