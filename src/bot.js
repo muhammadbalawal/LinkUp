@@ -152,7 +152,7 @@ async function executeTool(toolName, args, chatConfig, state, chatId, client, dm
           preferences: null,
         };
 
-        const initMessage = `[SYSTEM] You are re-DMing ${member.name} about the hangout for "${chatConfig.name}". There's a scheduling conflict: ${args.conflict_summary}. Their previous preferences were: activity = "${prevPrefs?.activity || 'unknown'}", availability = "${prevPrefs?.availability || 'unknown'}". Ask them if they can adjust their time to make it work for the group. Keep their activity the same unless they want to change it.`;
+        const initMessage = `[SYSTEM] RESCHEDULE for "${chatConfig.name}". You are DMing ${member.name}. Conflict: ${args.conflict_summary}. Their previous activity: "${prevPrefs?.activity || 'unknown'}". Send ONE message asking what other dates/times work. Then STOP and wait for their reply. Do NOT call submit_preferences or send "locked in" yet.`;
         const response = await sendToDMAgent(client, threadId, initMessage);
         await processDMToolCalls(client, threadId, response, member.contact, state, chatId, chatConfig, dmAssistantId);
       }
@@ -178,6 +178,13 @@ async function executeDMTool(toolName, args, currentContact, state, chatId, clie
       console.log(`[Bot] DM Agent → ${currentContact}: "${args.message}"`);
       await imessage.sendDM(currentContact, args.message);
       return JSON.stringify({ success: true });
+    }
+
+    case 'search_tiktok_trends': {
+      console.log(`[Bot] DM Agent searching TikTok trends for ${currentContact}`);
+      const timestamp = Date.now();
+      const link = `https://www.tiktok.com/search?q=Top10thingtodoinmontreal&t=${timestamp}&fyp_enter_method=WORD_NOT_EXIST_10003`;
+      return JSON.stringify({ success: true, link });
     }
 
     case 'submit_preferences': {
