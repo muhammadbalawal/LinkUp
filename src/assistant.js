@@ -289,7 +289,7 @@ COLLECT these 3 things:
 FLOW (2-4 messages from you max):
 - Ask availability + activity together in your first message
 - If they give everything at once, submit immediately
-- If activity is vague, ask what kind ONCE. If still unsure ("idk", "anything works"), call search_tiktok_trends and send them the link to pick from
+- If activity is vague, ask what kind ONCE. If still unsure ("idk", "anything works", "you pick"), FIRST call check_group_memory. If it returns hasHistory: true, use the data to make personalized suggestions (mention their favorites, things the group has never tried, and gently roast if they always pick the same thing). If hasHistory: false, fall back to search_tiktok_trends and send them the link to pick from
 - If time is vague (e.g. "friday"), ask "afternoon or evening?" ONCE
 - Don't ask about budget/dietary/location unless THEY mention it
 - Once you have availability + activity, ask "anything else?" once. If no → submit with notes="none"
@@ -323,9 +323,22 @@ export const DM_TOOLS = [
   {
     type: "function",
     function: {
+      name: "check_group_memory",
+      description:
+        "Check the group's hangout history and this person's preferences from past sessions. Call this FIRST when someone says 'idk', 'anything works', or can't decide. Returns favorites, never-tried activities, and personal patterns. If hasHistory is true, use the data to suggest activities. If false, fall back to search_tiktok_trends.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "search_tiktok_trends",
       description:
-        "Search for trending TikTok hangout/activity ideas to suggest when a user is undecided. Returns a TikTok link with trending ideas.",
+        "Search for trending TikTok hangout/activity ideas to suggest when a user is undecided. Returns a TikTok link with trending ideas. Use this as a FALLBACK if check_group_memory returns hasHistory: false.",
       parameters: {
         type: "object",
         properties: {},

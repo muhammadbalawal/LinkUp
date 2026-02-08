@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { setupAssistant, setupDMAgent, getOrCreateThread } from './src/assistant.js';
 import { startPolling } from './src/bot.js';
+import { connectDB } from './src/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
@@ -34,6 +35,14 @@ async function main() {
 
   const { dmAssistantId } = await setupDMAgent(client);
   console.log(`[Init] DM Agent ID: ${dmAssistantId}\n`);
+
+  // Connect to MongoDB Atlas if configured
+  if (config.mongodb_uri) {
+    console.log('[Init] Connecting to MongoDB Atlas...');
+    await connectDB(config.mongodb_uri);
+  } else {
+    console.log('[Init] No MongoDB URI configured — running without memory');
+  }
 
   // Set up threads for each group chat
   for (const gc of config.group_chats) {

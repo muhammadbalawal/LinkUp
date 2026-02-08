@@ -8,10 +8,11 @@ import {
   createDMThread,
   sendToDMAgent,
 } from './assistant.js';
+import { isConnected, savePreference, saveHangout, getGroupMemory, getHangoutStats } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = path.join(__dirname, '..', 'state.json');
-const POLL_INTERVAL = 10_000; // 10 seconds
+const POLL_INTERVAL = 3_000; // 3 seconds
 
 function loadState() {
   try {
@@ -110,6 +111,16 @@ async function executeTool(toolName, args, chatConfig, state, chatId, client, dm
       state.chats[chatId].hangouts.push(hangout);
       saveState(state);
       console.log(`[Bot] Logged hangout: ${hangout.description}`);
+
+      // Save to MongoDB for long-term memory
+      if (isConnected()) {
+        await saveHangout({
+          groupId: chatId,
+          groupName: chatConfig.name,
+          description: hangout.description,
+        });
+      }
+
       return JSON.stringify({ success: true, hangout });
     }
 
@@ -121,7 +132,18 @@ async function executeTool(toolName, args, chatConfig, state, chatId, client, dm
       }
       const last = hangouts[hangouts.length - 1];
       const daysAgo = Math.floor((Date.now() - new Date(last.date).getTime()) / (1000 * 60 * 60 * 24));
-      return JSON.stringify({ lastHangout: last, daysAgo });
+
+      // Enrich with MongoDB stats if available
+      const result = { lastHangout: last, daysAgo };
+      if (isConnected()) {
+        const stats = await getHangoutStats(chatId);
+        if (stats) {
+          result.totalHangouts = stats.totalHangouts;
+          result.weeklyStreak = stats.streak;
+        }
+      }
+
+      return JSON.stringify(result);
     }
 
     case 'get_member_availability': {
@@ -187,6 +209,18 @@ async function executeDMTool(toolName, args, currentContact, state, chatId, clie
       return JSON.stringify({ success: true, link });
     }
 
+    case 'check_group_memory': {
+      console.log(`[Bot] DM Agent checking group memory for ${currentContact} in ${chatId}`);
+      if (!isConnected()) {
+        return JSON.stringify({ hasHistory: false, reason: 'MongoDB not configured' });
+      }
+      const agentInfo = event?.agents?.[currentContact];
+      const personName = agentInfo?.name || currentContact;
+      const memory = await getGroupMemory(chatId, currentContact, personName);
+      console.log(`[Bot] Group memory result: hasHistory=${memory.hasHistory}`);
+      return JSON.stringify(memory);
+    }
+
     case 'submit_preferences': {
       console.log(`[Bot] DM Agent submitted preferences for ${currentContact}`);
       const agent = event.agents[currentContact];
@@ -197,6 +231,18 @@ async function executeDMTool(toolName, args, currentContact, state, chatId, clie
         notes: args.notes,
       };
       saveState(state);
+
+      // Save to MongoDB for long-term memory
+      if (isConnected()) {
+        await savePreference({
+          groupId: chatId,
+          contact: currentContact,
+          name: agent.name,
+          activity: args.activity,
+          availability: args.availability,
+          notes: args.notes,
+        });
+      }
 
       // Check if all agents are done
       const allDone = Object.values(event.agents).every(a => a.status === 'done');

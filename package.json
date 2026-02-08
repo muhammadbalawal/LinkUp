@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "backboard-sdk": "^1.0.0",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.0.0",
+    "mongodb": "^6.12.0"
   }
 }
